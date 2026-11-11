@@ -1,0 +1,24 @@
+node_modules/
+package-lock.json
+
+# large mesh assets
+*.fbx
+
+# python
+__pycache__/
+*.pyc
+
+# WSL / Windows download metadata
+*:Zone.Identifier
+
+# generated analysis output
+graphify-out/
+
+# made from VEX's field CAD by tools/override_cad.py; the CAD is not ours to publish
+/cad/
+
+# local Python environment with mujoco, numpy and cadquery-ocp
+/.venv/
+
+# MuJoCo writes its warnings here; tests/test_mujoco_checks.py makes some on purpose
+MUJOCO_LOG.TXT

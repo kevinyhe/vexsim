@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vexsim"
+version = "2.0.0"
+description = "Physics simulator for VEX V5 autonomous routines"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+dependencies = []
+
+[project.optional-dependencies]
+override = ["mujoco==3.17.0", "numpy==2.5.4"]
+
+[project.scripts]
+vexsim = "vexsim.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["vexsim*"]
