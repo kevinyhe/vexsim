@@ -14,7 +14,7 @@ __pycache__/
 # generated analysis output
 graphify-out/
 
-# made from VEX's field CAD by tools/override_cad.py; the CAD is not ours to publish
+# the Override field shapes, copied from kevinyhe/vexsim-cad or cut by tools/override_cad.py
 /cad/
 
 # local Python environment with mujoco, numpy and cadquery-ocp
