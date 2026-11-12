@@ -2,9 +2,9 @@
 
     .venv/bin/python tools/override_cad.py "276-9250-000 (2026-04-26).STEP"
 
-The STEP file is VEX's, from the Override field CAD download.  What this
-writes is made from it, so it stays out of git: everything goes in
-`cad/override/` at the top of this checkout.
+The STEP file is VEX's, from the Override field CAD download.  Everything
+goes in `cad/override/` at the top of this checkout; commit the first four
+files below.
 
 - `shapes.json`: the Pin half, the Cup half and the Goal's tapered part cut
   across their axes every `STEP_IN` inches.  For each cut, in each of

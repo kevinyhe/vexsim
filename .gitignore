@@ -14,8 +14,8 @@ __pycache__/
 # generated analysis output
 graphify-out/
 
-# the Override field shapes, copied from kevinyhe/vexsim-cad or cut by tools/override_cad.py
-/cad/
+# tools/override_cad.py keeps its cuts here so a second run on the same STEP file is quick
+/cad/override/profiles-*.json
 
 # local Python environment with mujoco, numpy and cadquery-ocp
 /.venv/
