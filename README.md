@@ -21,26 +21,20 @@ routines on it.
 ## Setup
 
 The drivetrain needs Python 3.8 or later and nothing else. The Override
-world needs MuJoCo, numpy and the field shapes cut from VEX's field CAD.
+world needs MuJoCo and numpy.
 
 ```sh
 git clone https://github.com/kevinyhe/vexsim
-git clone https://github.com/kevinyhe/vexsim-cad
 cd vexsim
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-mkdir -p cad/override
-cp ../vexsim-cad/*.json ../vexsim-cad/view.bin cad/override/
 ```
 
-The last two lines copy the field shapes from
-[vexsim-cad](https://github.com/kevinyhe/vexsim-cad) into `cad/override/`,
-which git ignores. Without them, `OverrideWorld` raises
-`override_cad.MissingCad`.
-
-To cut the shapes yourself, download
-[VEX's Override field CAD](https://content.vexrobotics.com/docs/2026-2027/override/files/v5rc-override-fieldcad.zip),
-unzip it, then:
+The Override field shapes are in `cad/override/`, cut from
+[VEX's Override field CAD](https://content.vexrobotics.com/docs/2026-2027/override/files/v5rc-override-fieldcad.zip)
+(276-9250-000, 26 April 2026). When VEX publishes new CAD or
+`tools/override_cad.py` changes, cut them again from the unzipped STEP file
+and commit the four files it writes:
 
 ```sh
 .venv/bin/pip install cadquery-ocp==8.0.1.1.0
@@ -48,8 +42,7 @@ unzip it, then:
 ```
 
 The first run takes about 20 minutes; a second run on the same STEP file
-skips the cutting. When the STEP file or `tools/override_cad.py` changes,
-remake the shapes and copy them into vexsim-cad.
+skips the cutting.
 
 ## Use
 

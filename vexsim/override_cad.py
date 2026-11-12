@@ -31,9 +31,8 @@ import numpy as np
 from .units import INCH
 
 CAD_DIR = Path(__file__).resolve().parent.parent / "cad" / "override"
-MAKE_IT = ('Override needs the field shapes cut from VEX\'s field CAD. Copy them from kevinyhe/vexsim-cad:\n'
-           f'    git clone https://github.com/kevinyhe/vexsim-cad && mkdir -p {CAD_DIR} && '
-           f'cp vexsim-cad/*.json vexsim-cad/view.bin {CAD_DIR}/\n(README, "Setup").')
+MAKE_IT = (f'The Override field shapes come with vexsim. Restore them with\n'
+           f'    git -C {CAD_DIR.parent.parent} checkout -- cad/override\n(README, "Setup").')
 
 INNER_TOLERANCE = 0.004
 OUTER_TOLERANCE = 0.008
