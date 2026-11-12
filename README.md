@@ -25,26 +25,31 @@ world needs MuJoCo, numpy and the field shapes cut from VEX's field CAD.
 
 ```sh
 git clone https://github.com/kevinyhe/vexsim
+git clone https://github.com/kevinyhe/vexsim-cad
 cd vexsim
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+mkdir -p cad/override
+cp ../vexsim-cad/*.json ../vexsim-cad/view.bin cad/override/
 ```
 
-The field shapes are made from VEX's CAD, so they are not in this
-repository. Download the Override field CAD from VEX, then:
+The last two lines copy the field shapes from
+[vexsim-cad](https://github.com/kevinyhe/vexsim-cad) into `cad/override/`,
+which git ignores. Without them, `OverrideWorld` raises
+`override_cad.MissingCad`.
+
+To cut the shapes yourself, download
+[VEX's Override field CAD](https://content.vexrobotics.com/docs/2026-2027/override/files/v5rc-override-fieldcad.zip),
+unzip it, then:
 
 ```sh
 .venv/bin/pip install cadquery-ocp==8.0.1.1.0
 .venv/bin/python tools/override_cad.py "<path>/276-9250-000 (2026-04-26).STEP"
 ```
 
-This writes `cad/override/`, which git ignores. The first run takes about
-20 minutes; a second run on the same STEP file skips the cutting. Without
-the shapes, `OverrideWorld` raises `override_cad.MissingCad`.
-
-mclib's CI copies the made files from the private repository
-`kevinyhe/vexsim-cad`. Remake them there when the STEP file or
-`tools/override_cad.py` changes.
+The first run takes about 20 minutes; a second run on the same STEP file
+skips the cutting. When the STEP file or `tools/override_cad.py` changes,
+remake the shapes and copy them into vexsim-cad.
 
 ## Use
 
