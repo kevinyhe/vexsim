@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import mujoco
 import numpy as np
@@ -27,6 +27,7 @@ from . import override_field as of
 from .arena import ContactLog, circle_overlap
 from .cascade import ROBOT, CascadeRobot, part_of
 from .mujoco_drive import MujocoDrive, settle
+from .other_robots import OtherRobot, OtherRobots, check_roles, robot_build
 from .pieces import WALLS, Piece, Pieces, RobotBuild
 from .units import INCH
 
@@ -82,11 +83,14 @@ class Overlap:
 
 
 class StartOverlapError(ValueError):
-    """The robot was put inside Pins, Cups or field elements, which would throw it out."""
+    """The robot was put inside Pins, Cups, field elements or another robot,
+    which would throw it out.  `robot` is which robot: "the robot", or an
+    other robot's `element`."""
 
-    def __init__(self, overlaps: List[Overlap]):
+    def __init__(self, overlaps: List[Overlap], robot: str = "the robot"):
         self.overlaps = overlaps
-        super().__init__("the robot starts inside "
+        self.robot = robot
+        super().__init__(f"{robot} starts inside "
                          + "; ".join(f"{overlap.name}, {overlap.depth / INCH:.2f} in deep" for overlap in overlaps))
 
 
@@ -139,18 +143,20 @@ def robot_at_rest(robot: CascadeRobot, chassis) -> np.ndarray:
 
 class OverrideWorld:
     def __init__(self, sim, robot: CascadeRobot, objects: bool = True, preload: Optional[str] = None,
-                 alliance: str = "red"):
+                 alliance: str = "red", others: Sequence[OtherRobot] = ()):
         """`robot` drives where `sim`'s pose has it.  `preload` is the colour
         of the half of the preload Pin that points up in the closed claw, or
-        None for no preload.  Raises StartOverlapError if the robot is put
-        inside anything but its preload."""
+        None for no preload.  `others` are the partner's and opponents'
+        robots (`other_robots`).  Raises StartOverlapError if the robot or
+        another robot is put inside anything but the robot's preload."""
         self.sim = sim
         self.robot = robot
         self.geometry = robot.geometry
         self.alliance = alliance
         chassis = sim.chassis
         start = sim.state
-        self.pieces = Pieces(robot=_robot_build(robot, chassis))
+        check_roles(others)
+        self.pieces = Pieces(robot=_robot_build(robot, chassis), others=[robot_build(o) for o in others])
         if objects:
             self.pieces.place_layout(of.starting_layout())
         model, data = self.pieces.model, self.pieces.data
@@ -161,6 +167,7 @@ class OverrideWorld:
         self.drive.forces.append(self.mechanism.apply)
         self.drive.after += [self.mechanism.after, self._after_step]
         self.drive.place(robot_at_rest(robot, chassis), start.x, start.y, start.theta)
+        self.others = OtherRobots(others, model, data, self.drive)
         sim.dynamics = self.drive
         sim.config.max_physics_dt = model.opt.timestep
         sim.power_mechanisms([motor for motors in self.mechanism.motors().values() for motor in motors])
@@ -187,11 +194,17 @@ class OverrideWorld:
                     if what is not self.preload]
         if overlaps:
             raise StartOverlapError(overlaps)
+        for other in self.others.drives:
+            overlaps = [Overlap(what, depth, point) for what, depth, point
+                        in self.pieces.overlaps(other.frame_geoms, own_element=other.robot.element)]
+            if overlaps:
+                raise StartOverlapError(overlaps, other.robot.element)
         self._settle_start()
 
     def _settle_start(self) -> None:
         """Let the robot, and the preload in its claw, come to rest before the Match starts."""
         settle(self.drive, START_SETTLE_SECONDS)
+        self.others.start()
         self.pieces.t = 0.0
         self.log = ContactLog(self.sim)
         self._follow_grip()
@@ -215,6 +228,9 @@ class OverrideWorld:
                      raised_loaders=list(self.raised_loaders), cg_height_in=round(self.center_of_mass()[2] / INCH, 2),
                      tilt_deg=round(math.degrees(tilt.angle), 2), fallen=tilt.fallen)
         frame["pieces"] = self.moved_pieces()
+        frame["others"] = {report["role"]: dict(x=round(report["x"], 4), y=round(report["y"], 4),
+                                                 theta=round(report["theta"], 4), fallen=report["fallen"])
+                           for report in self.others.reports()}
         return frame
 
     def center_of_mass(self) -> np.ndarray:

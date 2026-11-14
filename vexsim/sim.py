@@ -299,6 +299,16 @@ class Simulator:
         if self.config.log_every > 0 and self.steps % self.config.log_every == 0:
             self.log.record(self.sample())
 
+    def run_motors(self, dt: float) -> None:
+        """Hand the motors the brain's writes that fall due and run the battery
+        and motors for `dt`, for a robot whose body another simulator's
+        world moves (`other_robots`)."""
+        self._write_motors(self.t)
+        self._solve_electrical(dt)
+        for motor in self.chassis.motors:
+            motor.thermal_step(dt)
+        self.t += dt
+
     def _write_motors(self, now: float) -> None:
         """Each brain write that has fallen due by `now` hands every motor its latest command."""
         while self._next_write <= now + 1e-9:

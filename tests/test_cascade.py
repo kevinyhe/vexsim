@@ -696,6 +696,24 @@ class TestClawAir(unittest.TestCase):
             strokes += 1
         self.assertAlmostEqual(strokes, 45, delta=2)
 
+    def test_a_sealed_tank_leaks_from_100_to_90_psi_in_an_hour(self):
+        claw = cascade.PneumaticClaw(GEOMETRY)
+        for _ in range(3600):
+            claw.leak(1.0)
+        self.assertAlmostEqual(claw.air_psi, 90.0, delta=0.01)
+
+    def test_the_tank_leaks_while_the_valve_lets_air_through(self):
+        claw = cascade.PneumaticClaw(GEOMETRY)
+        claw.command(True)
+        after_stroke = claw.air_psi
+        for _ in range(15000):
+            claw.flow(0.001, GEOMETRY.piston_travel_mm / 1000.0, 0.0)
+        self.assertAlmostEqual(after_stroke - claw.air_psi, 0.044 * after_stroke / 100.0, delta=0.002)
+
+    def test_a_leak_too_fast_to_stay_choked_for_an_hour_is_refused(self):
+        with self.assertRaises(ValueError):
+            cascade.PneumaticClaw(dataclasses.replace(GEOMETRY, leak_psi_first_hour=95.0))
+
     def test_the_cascade_claw_strokes_77_times_before_its_tank_is_down_to_25_psi(self):
         claw = cascade.PneumaticClaw(GEOMETRY)
         strokes = 0
