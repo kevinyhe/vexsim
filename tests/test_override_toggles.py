@@ -75,6 +75,29 @@ class TestToggleAtRest(unittest.TestCase):
                 self.assertEqual(color, "yellow")
 
 
+class TestLoosePiecesOnToggles(unittest.TestCase):
+    def test_a_pin_dropped_on_a_bar_lands_on_it_tips_it_and_slides_off_into_the_field(self):
+        field = pieces.Pieces(pins=1, cups=0)
+        bar = next(b for b in field.toggles.bars if b.mount.quadrant == "left")
+        mount = bar.mount
+        pin = field.add_pin(("red", "yellow"), (mount.x, mount.y, of.TOGGLE_AXLE_HEIGHT + 6.0 * INCH),
+                            (0.0, 0.0, 1.0))
+        touched_at, most_tip = None, 0.0
+        for k in range(round(1.5 / pieces.DT)):
+            field.step()
+            if touched_at is None and any({field.body_of_geom[a], field.body_of_geom[b]} == {pin.body, bar.body}
+                                          for a, b in field.contact_geoms):
+                touched_at = k * pieces.DT
+            most_tip = max(most_tip, abs(math.degrees(bar.angle)))
+        self.assertIsNotNone(touched_at)
+        self.assertLess(touched_at, 0.2)
+        self.assertGreater(most_tip, 0.3)
+        x, y, z = pin.center()
+        self.assertGreater(x * mount.inward_x + y * mount.inward_y, -of.HALF + 6.0 * INCH)
+        self.assertLess(z, 2.0 * INCH)
+        self.assertEqual(bar.color(), "yellow")
+
+
 class TestToggleScoring(unittest.TestCase):
     def test_each_toggle_setting_changes_who_owns_the_yellow_half(self):
         world = world_at_rest()

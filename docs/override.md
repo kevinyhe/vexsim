@@ -53,6 +53,10 @@ the nearest face until something pushes it past the corner. Released 50 to
 80 degrees round, it wedges and stays. A Toggle scores only while it sits on
 a face and nothing on the robot touches it (`<SC4>`).
 
+The bar is a body like the pieces, so loose Pins and Cups hit it as a held one
+does. A Pin dropped on a bar lands on it, tips it under a degree, and slides
+off into the field.
+
 ### Match Loads
 
 `match_load("red right")` raises that Loader and stands a Cup holding a Pin
@@ -70,7 +74,6 @@ time in Skills, through the red Loaders.
 
 ### Not modelled
 
-- Loose Pins and Cups touching the Toggles. A held one does.
 - A Toggle's spin after a part drags it.
 - Match Loads dropped through a Loader's top.
 
