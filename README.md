@@ -9,7 +9,8 @@ measured before it runs on a robot.
 - **Sensors.** Encoders, rotation sensor, IMU, GPS and distance sensor, each
   with its refresh period, rounding and seeded noise.
 - **Override field (2026-27).** Walls, Goals, Loaders, Toggles, Pins and
-  Cups as MuJoCo bodies, a cascade-lift robot, and the game's scoring.
+  Cups as MuJoCo bodies, a cascade-lift robot, the partner's and opponents'
+  robots, and the game's scoring.
 
 [Physics model](docs/model.md) · [Override world](docs/override.md) ·
 [Outputs](docs/outputs.md)
@@ -134,6 +135,7 @@ traction wheels, and turns at 155, 94 and 38 degrees a second.
 | `arena.py` | robot outlines, contact reports, `open_floor()` |
 | `override.py`, `override_field.py` | `OverrideWorld`; the field's sizes and rules from the game manual |
 | `pieces.py`, `toggles.py`, `override_cad.py` | Pins, Cups, Goals and Toggles in MuJoCo; the CAD shapes |
+| `other_robots.py` | the partner's and opponents' robots: hold still or drive a path |
 | `cascade.py`, `mujoco_drive.py` | the cascade robot; the drivetrain as MuJoCo bodies |
 | `mujoco_checks.py`, `out_of_reach.py`, `setup_cache.py` | MuJoCo error checks, contact culling, a disk cache of world setups |
 

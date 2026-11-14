@@ -6,19 +6,21 @@ field, pieces and mechanism share one MuJoCo model. Step the world, not the
 simulator.
 
 ```python
-OverrideWorld(sim, robot, objects=True, preload=None)
+OverrideWorld(sim, robot, objects=True, preload=None, others=())
 ```
 
 `robot` starts where `sim`'s pose puts it. `preload` is `"red"` or
 `"yellow"`: the half of the preload Pin that points up in the closed claw.
-A robot placed inside anything but its preload raises `StartOverlapError`.
+`others` are the partner's and opponents' robots (below). A robot placed
+inside anything but its preload raises `StartOverlapError`, whose `robot`
+says which.
 
 | Call | Returns |
 | --- | --- |
 | `step(dt)` | advances the world by `dt` seconds |
 | `score(autonomous=True)` | points by alliance, `<SC1>` to `<SC8>` |
 | `reported_contacts()` | each hit: where, peak force, drive current |
-| `telemetry()` | robot state, held piece, Toggles, `raised_loaders`, CG height, tilt, moved pieces |
+| `telemetry()` | robot state, held piece, Toggles, `raised_loaders`, CG height, tilt, moved pieces, where each other robot is |
 | `piece_list()` | id, kind and colours of every Pin and Cup |
 | `moved_pieces()` | id -> `[x, y, z, ax, ay, az]` for pieces that moved since the last call |
 | `stacks()` | what is nested in what |
@@ -26,6 +28,7 @@ A robot placed inside anything but its preload raises `StartOverlapError`.
 | `match_load(name)`, `lower_loader(name)` | a Drive Team Match Load (below) |
 | `grip`, `grips`, `drops` | the held piece; every take and let-go with time and reason |
 | `mechanism.lift.motors`, `robot.claw.command(closed)` | the lift's motors; the claw valve |
+| `others.reports()` | each other robot: where it is, how far it moved, how far from its path's end, whether it finished |
 
 ## Field
 
@@ -34,6 +37,7 @@ A robot placed inside anything but its preload raises `StartOverlapError`.
 | Walls, Goals, Loaders | fixed MuJoCo shapes; the robot stops on them and the drive motors feel it | `pieces.py` |
 | 37 Pins, 36 Cups | free bodies with the CAD's shapes: fall, slide, tip, roll, bounce, nest | `pieces.py`, `override_cad.py` |
 | 4 Toggles | bars on hubs in slotted brackets, turned only by contact | `toggles.py` |
+| Other robots | drivetrains with a box frame; hold still braking or drive a path | `other_robots.py` |
 | Score | Pin halves, Toggle colours, Autonomous Bonus, Win Point | `override_field.py` |
 
 Masses: Pin 72 g, Cup 77 g, weighed. Inertia is the CAD solid's at even
@@ -51,11 +55,32 @@ The hubs slide up the bracket slots as the bar turns. Off a face, a corner
 presses on a bracket plate and lifts the hubs, so gravity returns the bar to
 the nearest face until something pushes it past the corner. Released 50 to
 80 degrees round, it wedges and stays. A Toggle scores only while it sits on
-a face and nothing on the robot touches it (`<SC4>`).
+a face and nothing on a robot touches it (`<SC4>`); the other robots count.
 
 The bar is a body like the pieces, so loose Pins and Cups hit it as a held one
 does. A Pin dropped on a bar lands on it, tips it under a degree, and slides
 off into the field.
+
+### Other robots
+
+```python
+OtherRobot("opponent 1", x, y, theta, length=18 * INCH, width=18 * INCH, height=18 * INCH,
+           mass_lb=15.0, drive="four_motor_450", traction="none", path=(), volts=8.0, start_s=0.0)
+```
+
+The role is `"partner"`, `"opponent 1"` or `"opponent 2"`; contact reports
+name it "the opponent 1 robot". Its drivetrain is the vexsim preset `drive`,
+with `traction` wheels (`"middle"` or `"all"`) if asked, on its own battery,
+under a box its size from 0.4 in off the floor. With no `path` it holds still
+with its motors on brake. With one, it waits `start_s`, then chases a point
+12 in ahead along the path from where it really is, at `volts`, slows over
+the last 24 in, and brakes 2 in from the end or once past it
+(`other_robots.GUESSES`).
+
+Hit from behind at 8 V by the cascade robot, a 15 lb braking robot on
+3.25 in omnis is pushed along; hit from the side it rolls farther on its
+omnis and turns. The box cannot reach over a wall, so it never touches a
+Toggle.
 
 ### Match Loads
 

@@ -356,16 +356,17 @@ _TEMPLATES: Dict[tuple, mujoco.MjModel] = {}
 
 
 def _template(goals: Tuple[of.Goal, ...], loaders: Tuple[of.Loader, ...], pins: int, cups: int,
-              robot: Optional[RobotBuild]) -> mujoco.MjModel:
-    key = (goals, loaders, pins, cups, None if robot is None else robot.key)
+              robot: Optional[RobotBuild], others: Tuple[RobotBuild, ...]) -> mujoco.MjModel:
+    key = (goals, loaders, pins, cups, None if robot is None else robot.key, tuple(o.key for o in others))
     if key not in _TEMPLATES:
-        inputs = (goals, loaders, pins, cups, None if robot is None else robot.inputs)
-        _TEMPLATES[key] = setup_cache.kept("model", inputs, lambda: _build(goals, loaders, pins, cups, robot))
+        inputs = (goals, loaders, pins, cups, None if robot is None else robot.inputs,
+                  tuple(o.inputs for o in others))
+        _TEMPLATES[key] = setup_cache.kept("model", inputs, lambda: _build(goals, loaders, pins, cups, robot, others))
     return _TEMPLATES[key]
 
 
 def _build(goals: Tuple[of.Goal, ...], loaders: Tuple[of.Loader, ...], pins: int, cups: int,
-           robot: Optional[RobotBuild]) -> mujoco.MjModel:
+           robot: Optional[RobotBuild], others: Tuple[RobotBuild, ...]) -> mujoco.MjModel:
     spec = mujoco.MjSpec()
     spec.memory = ARENA_BYTES
     option = spec.option
@@ -385,6 +386,8 @@ def _build(goals: Tuple[of.Goal, ...], loaders: Tuple[of.Loader, ...], pins: int
     _piece_bodies(spec, "cup", cups)
     if robot is not None:
         robot.build(spec)
+    for other in others:
+        other.build(spec)
     return spec.compile()
 
 
@@ -396,14 +399,16 @@ _AT_REST: Dict[tuple, List[tuple]] = {}
 
 
 class Pieces:
-    """Pins and Cups on the field, and the robot when `robot` says how to build it."""
+    """Pins and Cups on the field, the robot when `robot` says how to build
+    it, and the other robots `others` build (`other_robots`)."""
 
     def __init__(self, goals: Sequence[of.Goal] = of.GOALS, loaders: Sequence[of.Loader] = of.LOADERS,
-                 pins: int = MAX_PINS, cups: int = MAX_CUPS, robot: Optional[RobotBuild] = None):
+                 pins: int = MAX_PINS, cups: int = MAX_CUPS, robot: Optional[RobotBuild] = None,
+                 others: Sequence[RobotBuild] = ()):
         self.goals = tuple(goals)
         self.loaders = tuple(loaders)
         self.most = dict(pin=pins, cup=cups)
-        self.model = copy.deepcopy(_template(self.goals, self.loaders, pins, cups, robot))
+        self.model = copy.deepcopy(_template(self.goals, self.loaders, pins, cups, robot, tuple(others)))
         self.data = mujoco.MjData(self.model)
         self.qpos_at = self.model.jnt_qposadr[self.model.body_jntadr]
         self.qvel_at = self.model.jnt_dofadr[self.model.body_jntadr]
@@ -415,7 +420,13 @@ class Pieces:
         self.robot_geoms = np.nonzero(np.isin(self.model.geom_bodyid, self.robot_bodies)
                                       & (self.model.geom_contype != 0))[0]
         self.robot_geom_set = frozenset(self.robot_geoms.tolist())
-        self._robot_body_set = frozenset(self.robot_bodies.tolist())
+        other_roots = [self.model.body(other.root).id for other in others]
+        other_bodies = np.nonzero(np.isin(self.model.body_rootid, other_roots))[0]
+        self._robot_body_set = frozenset(self.robot_bodies.tolist() + other_bodies.tolist())
+        #: Geoms of the robot and of the other robots, for the Toggles' <SC4>
+        self.every_robot_geom = frozenset(
+            np.nonzero(np.isin(self.model.geom_bodyid, list(self._robot_body_set))
+                       & (self.model.geom_contype != 0))[0].tolist())
         self.body_of_geom: List[int] = self.model.geom_bodyid.tolist()
         self.by_body: Dict[int, Piece] = {}
         #: qpos addresses of each Pin's and each Cup's centre, in the order of `pins` and `cups`
@@ -556,7 +567,7 @@ class Pieces:
         self.t += dt
         self.contact_geoms = self.data.contact.geom[:self.data.ncon].tolist()
         self._keep_awake_what_the_robot_touches()
-        self.toggles.note_touches(self.contact_geoms, self.robot_geom_set)
+        self.toggles.note_touches(self.contact_geoms, self.every_robot_geom)
 
     def _keep_awake_what_the_robot_touches(self) -> None:
         """A piece resting on the robot, or on pieces resting on it, shares
@@ -589,8 +600,14 @@ class Pieces:
         """What the robot reaches into where it stands, further than
         OVERLAP_ALLOWED: (the Piece, or the field element's name, how deep,
         the deepest point), the deepest first, each thing once."""
+        return self.overlaps(self.robot_geoms)
+
+    def overlaps(self, geoms: Sequence[int], own_element: Optional[str] = None
+                 ) -> List[Tuple[object, float, Tuple[float, float, float]]]:
+        """What `geoms` reach into, as `robot_overlaps` gives it, leaving out
+        the field element `own_element` they make up."""
         mujoco.mj_kinematics(self.model, self.data)
-        targets = [(geom, name) for geom, name in self.elements.items()]
+        targets = [(geom, name) for geom, name in self.elements.items() if name != own_element]
         for piece in self.pieces():
             start = self.model.body_geomadr[piece.body]
             targets += [(geom, piece) for geom in range(start + 1, start + self.model.body_geomnum[piece.body])]
@@ -599,7 +616,7 @@ class Pieces:
         target_geoms = np.array([geom for geom, _ in targets], dtype=int)
         target_bounds = self.model.geom_rbound[target_geoms]
         target_middles = self.data.geom_xpos[target_geoms]
-        for geom in self.robot_geoms:
+        for geom in geoms:
             apart = np.sum((target_middles - self.data.geom_xpos[geom]) ** 2, axis=1)
             reach = self.model.geom_rbound[geom] + target_bounds
             for index in np.nonzero(apart <= reach ** 2)[0].tolist():
