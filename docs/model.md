@@ -94,7 +94,7 @@ wall holds its push without creeping.
 | 4 in omni | 0.90 | VEX Forum pull test |
 | 2.75 in omni | 0.84 | VEX Forum pull test |
 | 3.25 in omni | 0.87 | guess between the two |
-| traction | 0.81 | VEX Forum tilt test |
+| traction | 0.81, the same sideways | VEX Forum tilt test; sideways is a guess |
 | mecanum | 0.85 | VEX Forum locked-wheel drag |
 
 Rolling resistance and turning scrub come from how far a wheel sinks. Each

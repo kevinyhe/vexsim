@@ -114,6 +114,12 @@ numbers.
 `differential_drive(...)` builds these shapes. For any other, put
 `WheelUnit`s in a `Chassis` (`examples/06_custom_robot.py`).
 
+`with_traction_wheels(chassis, "middle")` swaps the middle wheel on each side
+of a 6-wheel drive for a traction wheel the same size, and `"all"` swaps every
+driven wheel. In a curve at 12 V and 7 V, `six_motor_450` slides sideways at
+30 in/s on omnis, 6 in/s with middle traction wheels and 1 in/s on all
+traction wheels, and turns at 155, 94 and 38 degrees a second.
+
 ## Layout
 
 | Module | Contents |
