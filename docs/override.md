@@ -72,7 +72,8 @@ The role is `"partner"`, `"opponent 1"` or `"opponent 2"`; contact reports
 name it "the opponent 1 robot". Its drivetrain is the vexsim preset `drive`,
 with `traction` wheels (`"middle"` or `"all"`) if asked, on its own battery,
 under a box its size from 0.4 in off the floor. With no `path` it holds still
-with its motors on brake. With one, it waits `start_s`, then chases a point
+with its motors on brake. With one, it brakes while the world settles, waits
+`start_s` after the Match starts (the world's settle ends), then chases a point
 12 in ahead along the path from where it really is, at `volts`, slows over
 the last 24 in, and brakes 2 in from the end or once past it
 (`other_robots.GUESSES`).
