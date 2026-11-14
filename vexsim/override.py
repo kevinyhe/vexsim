@@ -316,17 +316,19 @@ class OverrideWorld:
     def _gripped(self) -> Optional[Piece]:
         """The lowest piece the jaws press on in a stack both jaws press on
         (each jaw pressing some piece of it).  A Pin both jaws press on in a
-        Cup no jaw touches is held on its own."""
+        Cup no jaw touches is held on its own.  Pressing a Pin's flange,
+        which the jaws slip on, holds nothing."""
         d = self.data
         pressing: Dict[int, set] = {}
         force = np.zeros(6)
         jaws = set(self.mechanism.jaw_bodies)
         body_of = self.pieces.body_of_geom
+        flanges = self.pieces.flanges
         solved = d.contact.efc_address[:d.ncon].tolist()
         for i, (first, second) in enumerate(d.contact.geom[:d.ncon].tolist()):
             b0, b1 = body_of[first], body_of[second]
             jaw, other = (b0, b1) if b0 in jaws else (b1, b0) if b1 in jaws else (None, None)
-            if jaw is None or solved[i] < 0:
+            if jaw is None or solved[i] < 0 or first in flanges or second in flanges:
                 continue
             mujoco.mj_contactForce(self.model, d, i, force)
             if force[0] >= GRIP_FORCE:

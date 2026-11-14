@@ -82,10 +82,14 @@ NESTED_ANGLE = math.radians(30.0)
 #: What collides with what.  The tiles and walls are flat, and a flat face
 #: only ever meets a piece's convex outline, so they collide with that one
 #: part of a piece; the Goals, the Loaders, the robot and other pieces
-#: collide with all the convex parts of its shape.
-FLAT_BIT, STATIC_BIT, PIECE_BIT, ROBOT_BIT = 8, 1, 2, 4
-FREE = (PIECE_BIT, STATIC_BIT | PIECE_BIT | ROBOT_BIT, FLAT_BIT)
+#: collide with all the convex parts of its shape.  The claw's jaws collide
+#: with every convex part but a Pin's flange: they meet a flange only through
+#: the contacts without friction the robot adds for it (`FLANGE_SUFFIX`).
+FLAT_BIT, STATIC_BIT, PIECE_BIT, ROBOT_BIT, JAW_BIT, HELD_BY_JAWS_BIT = 8, 1, 2, 4, 16, 32
+FREE = (PIECE_BIT | HELD_BY_JAWS_BIT, STATIC_BIT | PIECE_BIT | ROBOT_BIT, FLAT_BIT)
 PARKED = (0, 0, 0)
+#: How the name of each Pin's flange geom ends
+FLANGE_SUFFIX = "|flange"
 
 GUESSES: Dict[str, str] = {
     "PIN_MASS and CUP_MASS": "The robot's owner, 2026-11-04/05: a Pin 72 g and a Cup 77 g, weighed.",
@@ -332,8 +336,10 @@ def _piece_bodies(spec, kind: str, count: int) -> None:
         body.sleep = mujoco.mjtSleepPolicy.mjSLEEP_INIT
         geom = body.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=outline, contype=0, conaffinity=0)
         contact_settings(geom, PIECE_MU)
-        for name in meshes:
+        for k, name in enumerate(meshes):
             geom = body.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=name, contype=0, conaffinity=0)
+            if kind == "pin" and k == 0:
+                geom.name = f"{kind}{i}{FLANGE_SUFFIX}"
             contact_settings(geom, PIECE_MU)
 
 
@@ -428,6 +434,10 @@ class Pieces:
             np.nonzero(np.isin(self.model.geom_bodyid, list(self._robot_body_set))
                        & (self.model.geom_contype != 0))[0].tolist())
         self.body_of_geom: List[int] = self.model.geom_bodyid.tolist()
+        #: Each Pin's flange geom, by the Pin's body
+        self.flange_of: Dict[int, int] = {int(self.model.geom_bodyid[g]): g for g in range(self.model.ngeom)
+                                          if self.model.geom(g).name.endswith(FLANGE_SUFFIX)}
+        self.flanges = frozenset(self.flange_of.values())
         self.by_body: Dict[int, Piece] = {}
         #: qpos addresses of each Pin's and each Cup's centre, in the order of `pins` and `cups`
         self._centres_at = {kind: np.zeros((0, 3), dtype=int) for kind in ("pin", "cup")}
@@ -504,6 +514,8 @@ class Pieces:
         self.model.geom_conaffinity[start] = outline
         self.model.geom_contype[start + 1:start + count] = contype
         self.model.geom_conaffinity[start + 1:start + count] = conaffinity
+        if piece.body in self.flange_of:
+            self.model.geom_contype[self.flange_of[piece.body]] = contype & ~HELD_BY_JAWS_BIT
         self.model.body_contype[piece.body] = contype
         self.model.body_conaffinity[piece.body] = conaffinity | outline
         self.body_bits[piece.body] = (contype, conaffinity | outline)

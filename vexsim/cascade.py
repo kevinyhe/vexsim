@@ -26,7 +26,9 @@ On a four-motor drivetrain:
   sits on the Cup's rim, is in the recess and touches nothing.  So each jaw
   holds the stack at two heights.  The jaws hold by friction.  A lone Cup is
   held by the bottom bands; a lone Pin hung in the claw rests its flange on
-  the bottom bands and is squeezed by the top ones.  With the lift down the
+  the bottom bands and is squeezed by the top ones.  The pads slip on a
+  Pin's flange, so the claw cannot lift a Pin by it: a lone Pin standing in
+  a Goal stays there.  With the lift down the
   claw's middle is level with the flange of a stack standing on the floor.
   A Pin standing on its own on the floor is too thin where the bands reach,
   so they close past it.  A plate behind the jaws reaches down into the
@@ -136,7 +138,9 @@ CHOSEN: Dict[str, str] = {
                            "the ridge in a recess between. A lone Cup is held by the bottom bands. A lone Pin "
                            "hangs with its flange on, or up to 0.02 in over, the bottom bands and is squeezed by "
                            "the top bands. The jaws close past every Pin's flange, so a Pin's three flats cannot "
-                           "let it through.",
+                           "let it through. On 2026-11-14 the owner said the claw cannot pick up a lone Pin, only "
+                           "a Pin in a Cup, with the Cup either way up, so the pads meet a Pin's flange without "
+                           "friction.",
     "Claw": "The robot's owner, 2026-11-04/05: one pneumatic piston, V-shaped jaws (35 degrees kept), rubber pads "
             "with friction 0.9 that give about 0.01 in, gripping slightly harder than the 48.5 N a jaw the "
             "sim had before.",
@@ -894,6 +898,20 @@ class CascadeRobot:
         self._add_hinges(bodies, self.components(chassis))
         for component in self.components(chassis):
             self._add_shape(spec, bodies[body_name(component, g)], component, masses.get(component.key, 0.0))
+        self._jaws_slip_on_flanges(spec)
+
+    @staticmethod
+    def _jaws_slip_on_flanges(spec: mujoco.MjSpec) -> None:
+        """Each jaw meets each Pin's flange without friction, so the claw
+        cannot lift a Pin by its flange (`CHOSEN["What the claw holds"]`)."""
+        flanges = [geom.name for geom in spec.geoms if geom.name.endswith(pieces.FLANGE_SUFFIX)]
+        jaws = [geom for geom in spec.geoms if geom.contype == pieces.JAW_BIT]
+        for jaw in jaws:
+            for flange in flanges:
+                pair = spec.add_pair(geomname1=jaw.name, geomname2=flange)
+                pair.condim = 1
+                pair.solref = list(jaw.solref)
+                pair.solimp = list(jaw.solimp)
 
     def _add_hinges(self, bodies: dict, components: List[Component]) -> None:
         """A body for each hinge the roller's pieces turn on: the axle, on
@@ -968,8 +986,12 @@ class CascadeRobot:
             geom.mass = kg
         else:
             geom.density = 0.0
-        geom.contype = pieces.ROBOT_BIT
-        geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.PIECE_BIT
+        if component.jaw_side:
+            geom.contype = pieces.JAW_BIT
+            geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.HELD_BY_JAWS_BIT
+        else:
+            geom.contype = pieces.ROBOT_BIT
+            geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.PIECE_BIT
         g = self.geometry
         if component.padded:
             pieces.contact_settings(geom, g.jaw_mu, condim=4, priority=2, spin=g.jaw_mu * g.jaw_twist_reach_mm / 1000.0,
