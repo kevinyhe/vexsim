@@ -63,6 +63,12 @@ GUESSES: Dict[str, str] = {
                           "radius and 0.2 to 0.4 in wide under a quarter of a 16.5 lb robot, gives 0.05 to "
                           "0.08 from the foam alone. The rollers' axles and the rubber on them add to that by "
                           "an amount no one has measured, so the carpet figure stays.",
+    "Traction sideways grip": "0.81 static and 0.66 sliding, the same as forward: the tread is one rubber "
+                              "surface both ways, and the tilt test that gives 0.81 does not say which way the "
+                              "wheel faced. No one has measured it sideways on foam.",
+    "Traction slip peaks": "Grip peaks at 8% slip forward and at a 0.14 rad (8 degree) slip angle sideways, "
+                           "sooner than an omni's 9% and 0.22 rad: a solid tread has no rollers on axles to "
+                           "give before it grips.",
     "Mecanum sideways grip": "0.30 static, 0.25 sliding, a little above an omni for the angled rollers.",
     "Flex wheel grip": "1.32 (60A) to 1.75 (30A). Untested; the forum only says softer grips a bit more.",
     "Contact width": "Omni 0.4 in (one roller from each row), traction 1.0 in, flex 1.0 in, mecanum "

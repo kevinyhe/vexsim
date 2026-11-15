@@ -109,10 +109,10 @@ def claw_off(world, x, y):
     return math.hypot(point[0] - x, point[1] - y)
 
 
-def stack_in_the_claw(world):
-    """A gray-up Cup with a red/yellow Pin in it, standing under the open claw."""
+def stack_in_the_claw(world, cup_axis=of.DOWN):
+    """A Cup, gray end up unless `cup_axis` is up, with a red/yellow Pin in it, standing under the open claw."""
     x, y, _ = claw_point(world)
-    cup = world.pieces.add_cup((x, y, world.pieces.standing_height("cup")), of.DOWN)
+    cup = world.pieces.add_cup((x, y, world.pieces.standing_height("cup")), cup_axis)
     pin = world.pieces.add_pin(("red", "yellow"), (x, y, cup.center()[2] + cad.seats().pin_in_cup), of.UP)
     return cup, pin
 
@@ -438,6 +438,21 @@ class TestClaw(unittest.TestCase):
         self.assertEqual(world.drops, [])
         self.assertEqual(world.grips[0]["stacked"], [pin.id])
 
+    def test_it_takes_a_stack_with_its_cup_either_way_up(self):
+        for cup_axis in (of.UP, of.DOWN):
+            with self.subTest(cup_axis=cup_axis):
+                sim, world, hold = world_with(CLEAR_OF_EVERYTHING)
+                cup, pin = stack_in_the_claw(world, cup_axis)
+                start = cup.center()[2]
+                run(world, hold, 0.3)
+                world.robot.claw.command(True)
+                run(world, hold, 0.25)
+                self.assertIs(world.grip.piece, cup)
+                self.assertEqual(world.grip.carried, (pin,))
+                raise_to(world, hold, GEOMETRY.grip_lowest + 6.0, seconds=1.0)
+                self.assertGreater(cup.center()[2] - start, 5.5 * INCH)
+                self.assertIs(world.pieces.below(pin), cup)
+
     def test_on_a_stack_each_jaw_presses_the_cup_below_its_rim_and_the_pin_above_its_flange(self):
         for pin_turn in (0.0, 30.0, 60.0):
             with self.subTest(pin_turn=pin_turn):
@@ -557,7 +572,7 @@ class TestClaw(unittest.TestCase):
                 self.assertIs(world.grip.piece, pin)
                 flange_bottom = pin.center()[2] - cascade.PIN_FLANGE_HALF_IN * INCH
                 cup_band_top = claw_middle(world) - GEOMETRY.cup_band_top * INCH
-                self.assertGreater(flange_bottom - cup_band_top, -0.001 * INCH)
+                self.assertGreater(flange_bottom - cup_band_top, -PAD_GIVE_IN * INCH)
                 self.assertLess(flange_bottom - cup_band_top, 0.03 * INCH)
 
     def test_a_stack_driven_onto_at_speed_stays_standing_under_the_claw(self):
@@ -696,6 +711,24 @@ class TestClawAir(unittest.TestCase):
             strokes += 1
         self.assertAlmostEqual(strokes, 45, delta=2)
 
+    def test_a_sealed_tank_leaks_from_100_to_90_psi_in_an_hour(self):
+        claw = cascade.PneumaticClaw(GEOMETRY)
+        for _ in range(3600):
+            claw.leak(1.0)
+        self.assertAlmostEqual(claw.air_psi, 90.0, delta=0.01)
+
+    def test_the_tank_leaks_while_the_valve_lets_air_through(self):
+        claw = cascade.PneumaticClaw(GEOMETRY)
+        claw.command(True)
+        after_stroke = claw.air_psi
+        for _ in range(15000):
+            claw.flow(0.001, GEOMETRY.piston_travel_mm / 1000.0, 0.0)
+        self.assertAlmostEqual(after_stroke - claw.air_psi, 0.044 * after_stroke / 100.0, delta=0.002)
+
+    def test_a_leak_too_fast_to_stay_choked_for_an_hour_is_refused(self):
+        with self.assertRaises(ValueError):
+            cascade.PneumaticClaw(dataclasses.replace(GEOMETRY, leak_psi_first_hour=95.0))
+
     def test_the_cascade_claw_strokes_77_times_before_its_tank_is_down_to_25_psi(self):
         claw = cascade.PneumaticClaw(GEOMETRY)
         strokes = 0
@@ -753,6 +786,14 @@ def tilt_deg(piece):
     return math.degrees(math.acos(min(1.0, abs(piece.axis()[2]))))
 
 
+#: How far the claw's rubber pads give (cascade.CHOSEN["Claw"])
+PAD_GIVE_IN = 0.01
+
+#: How far back to set a robot seated at a Goal for its jaw tips to close on
+#: the flange of the Pin standing in it
+FLANGE_BETWEEN_THE_JAW_TIPS_IN = 2.1
+
+
 def seated_with_the_claw_over(goal_name, preload=None, pin_in_goal=False):
     """Drive the bite onto a Goal with the claw raised over a neutral Goal
     (over the centre Goal for that one), a Pin standing in the Goal if
@@ -789,8 +830,10 @@ def elements_touching(world, piece):
 class TestPreloadIntoGoalsKnownLimitation(unittest.TestCase):
     """Known limitation, open with the robot's owner: the preload, hung by
     its flange on the bottom bands, cannot be lowered onto a Goal's seat.
-    With the claw at its lowest it hangs 0.53 in over where a Pin sits in a
-    neutral Goal and 3.06 in over an alliance Goal's, so it has to be let go.
+    With the claw at its lowest it hangs 0.51 in over where a Pin sits in a
+    neutral Goal and 3.03 in over an alliance Goal's, so it has to be let go.
+    Let go over a neutral Goal it seats; until the pads slipped on its flange
+    (2026-11-14) it hung 0.02 in higher and did not stay.
     Its 2.35 in cone has 0.01 in a side in the Goal's 2.37 in hole: over the
     centre Goal its tip lands on the rim unless the claw is within 0.01 in of
     the middle.  Let go from the lowest over an alliance Goal, it seated 1
@@ -798,15 +841,15 @@ class TestPreloadIntoGoalsKnownLimitation(unittest.TestCase):
     middle each way; only 0.3 seated).  These tests hold what happens now, so
     a change to it shows."""
 
-    def test_at_the_claws_lowest_the_preload_hangs_0_53_in_over_a_neutral_seat_and_3_06_in_over_an_alliance_seat(self):
+    def test_at_the_claws_lowest_the_preload_hangs_0_51_in_over_a_neutral_seat_and_3_03_in_over_an_alliance_seat(self):
         sim, world, hold = world_with(CLEAR_OF_EVERYTHING, preload="yellow")
         run(world, hold, 0.5)
         middle = world.preload.center()[2]
-        self.assertAlmostEqual((middle - pin_seat(of.goal("neutral left"))) / INCH, 0.53, delta=0.03)
-        self.assertAlmostEqual((middle - pin_seat(of.goal("red left"))) / INCH, 3.06, delta=0.03)
+        self.assertAlmostEqual((middle - pin_seat(of.goal("neutral left"))) / INCH, 0.51, delta=0.03)
+        self.assertAlmostEqual((middle - pin_seat(of.goal("red left"))) / INCH, 3.03, delta=0.03)
         self.assertAlmostEqual((of.GOAL_HOLE_DIAMETER - of.PIN_CONE_DIAMETER) / INCH, 0.02, places=6)
 
-    def test_lowered_over_a_neutral_goal_and_let_go_the_preload_does_not_stay_in_it(self):
+    def test_lowered_over_a_neutral_goal_and_let_go_the_preload_seats_in_it(self):
         sim, world, hold, goal, _ = seated_with_the_claw_over("neutral left", preload="yellow")
         raise_to(world, hold, GEOMETRY.grip_lowest, 0.8)
         self.assertGreater(world.preload.center()[2] - pin_seat(goal), 0.5 * INCH)
@@ -817,8 +860,8 @@ class TestPreloadIntoGoalsKnownLimitation(unittest.TestCase):
         run(world, hold, 0.6)
         drive(sim, 0.0)
         run(world, hold, 1.0)
-        self.assertIsNone(world.preload.below)
-        self.assertEqual([s for s in world.stacks() if s.goal == goal.name], [])
+        self.assertEqual(world.preload.below, goal)
+        self.assertEqual(len([s for s in world.stacks() if s.goal == goal.name]), 1)
 
     def test_lowered_over_the_centre_goal_the_preloads_tip_lands_on_the_rim_and_it_leans_off_the_hole(self):
         sim, world, hold, goal, _ = seated_with_the_claw_over("center", preload="yellow")
@@ -839,22 +882,34 @@ class TestGoalsAndPins(unittest.TestCase):
         self.assertLess(claw_off(world, goal.x, goal.y), 0.4 * INCH)
         self.assertIs(world.grip.piece, world.preload)
 
-    def test_closing_on_a_pin_standing_in_a_neutral_goal_the_bottom_bands_grip_its_flange_and_lift_it_out(self):
+    def test_closing_over_a_pin_standing_in_a_neutral_goal_leaves_it_there(self):
         sim, world, hold, goal, _ = seated_with_the_claw_over("neutral left", pin_in_goal=True)
         pin = next(p for p in world.pieces.pins)
         raise_to(world, hold, GEOMETRY.grip_lowest, 0.8)
-        run(world, hold, 0.3)
         world.robot.claw.command(True)
         run(world, hold, 0.4)
-        on_the_pin = [(side, height, force) for side, body, height, force in jaw_contacts(world) if body == pin.body]
-        self.assertEqual({side for side, _, _ in on_the_pin}, {"left", "right"})
-        for side, height, force in on_the_pin:
-            self.assertAlmostEqual(height, pin.center()[2], delta=0.05 * INCH)
-            self.assertGreater(force, 40.0)
-        self.assertIs(world.grip.piece, pin)
-        raise_to(world, hold, world.robot.grip_height() / INCH + 3.0, 0.8)
-        self.assertGreater(pin.center()[2] - pin_seat(goal), 2.5 * INCH)
-        self.assertIsNone(world.pieces.below(pin))
+        self.assertIsNone(world.grip)
+        raise_to(world, hold, cascade.LIFT_HEIGHTS["over a neutral goal"], 0.8)
+        self.assertAlmostEqual(pin.center()[2], pin_seat(goal), delta=0.01 * INCH)
+        self.assertEqual(world.grips, [])
+
+    def test_jaws_closed_on_the_flange_of_a_pin_standing_in_a_neutral_goal_slip_up_off_it(self):
+        sim, world, hold, goal, _ = seated_with_the_claw_over("neutral left", pin_in_goal=True)
+        pin = next(p for p in world.pieces.pins)
+        st = sim.state
+        carry_to(world, (st.x - FLANGE_BETWEEN_THE_JAW_TIPS_IN * INCH * math.cos(st.theta),
+                         st.y - FLANGE_BETWEEN_THE_JAW_TIPS_IN * INCH * math.sin(st.theta), st.theta))
+        raise_to(world, hold, GEOMETRY.grip_lowest, 0.8)
+        world.robot.claw.command(True)
+        touched = set()
+        for _ in range(400):
+            hold.step()
+            world.step(0.001)
+            touched |= {body for _, body, _, _ in jaw_contacts(world)}
+        self.assertIn(pin.body, touched)
+        self.assertIsNone(world.grip)
+        raise_to(world, hold, cascade.LIFT_HEIGHTS["over a neutral goal"], 0.8)
+        self.assertAlmostEqual(pin.center()[2], pin_seat(goal), delta=0.01 * INCH)
 
     def test_closing_on_a_pin_standing_in_an_alliance_goal_the_jaws_pass_over_its_tip_and_touch_nothing(self):
         sim, world, hold, goal, _ = seated_with_the_claw_over("red left", pin_in_goal=True)

@@ -26,7 +26,9 @@ On a four-motor drivetrain:
   sits on the Cup's rim, is in the recess and touches nothing.  So each jaw
   holds the stack at two heights.  The jaws hold by friction.  A lone Cup is
   held by the bottom bands; a lone Pin hung in the claw rests its flange on
-  the bottom bands and is squeezed by the top ones.  With the lift down the
+  the bottom bands and is squeezed by the top ones.  The pads slip on a
+  Pin's flange, so the claw cannot lift a Pin by it: a lone Pin standing in
+  a Goal stays there.  With the lift down the
   claw's middle is level with the flange of a stack standing on the floor.
   A Pin standing on its own on the floor is too thin where the bands reach,
   so they close past it.  A plate behind the jaws reaches down into the
@@ -136,7 +138,9 @@ CHOSEN: Dict[str, str] = {
                            "the ridge in a recess between. A lone Cup is held by the bottom bands. A lone Pin "
                            "hangs with its flange on, or up to 0.02 in over, the bottom bands and is squeezed by "
                            "the top bands. The jaws close past every Pin's flange, so a Pin's three flats cannot "
-                           "let it through.",
+                           "let it through. On 2026-11-14 the owner said the claw cannot pick up a lone Pin, only "
+                           "a Pin in a Cup, with the Cup either way up, so the pads meet a Pin's flange without "
+                           "friction.",
     "Claw": "The robot's owner, 2026-11-04/05: one pneumatic piston, V-shaped jaws (35 degrees kept), rubber pads "
             "with friction 0.9 that give about 0.01 in, gripping slightly harder than the 48.5 N a jaw the "
             "sim had before.",
@@ -220,6 +224,11 @@ GUESSES: Dict[str, str] = {
             "is 1.58 in round), reaches from 0.5 in above the jaws' top to 0.25 in off the floor with the lift "
             "down. The carriage is 3.0 in tall from the jaws' bottom, as wide as the gap between the top "
             "stage's rails, and reaches from the back of the rails to the plate.",
+    "Air leak": "A sealed tank at 100 psi reads 90 psi an hour later: the leak is a hole the tank's air "
+                "rushes out of at the speed of sound until it is below 13 psi, so the tank loses the same "
+                "share of its pressure each second. No one has published how fast a VEX system leaks; the "
+                "forum's advice is to find and fix a leak that empties the tank overnight. At this rate the "
+                "tank loses 0.04 psi in a 15 s autonomous and 0.17 psi in a 60 s Skills run.",
     "Claw piston": "A 12 mm bore with a 4 mm rod and 25 mm of travel, pushing out to close the jaws through a "
                    "rack and pinion that moves each jaw 0.65 in: 59.0 N on each jaw at 100 psi closing, 52.5 N "
                    "opening, less as the tank empties. VEX's older kit sheet gives its cylinders a 10 mm bore, "
@@ -247,7 +256,7 @@ GUESSES: Dict[str, str] = {
     "Air": "One 200 mL tank at 100 psi, inside the two R25 allows. 8 in of tubing, 2.5 mm inside, from the "
            "valve to each side of the piston: 1.0 mL. With these tubes the older kit's numbers give 46 strokes "
            "from 100 to 25 psi against VEX's 45; without them 58. The cascade's claw gets 77 strokes from "
-           "100 to 25 psi. No leaks, and the air is the same temperature after a stroke as before it.",
+           "100 to 25 psi. The air is the same temperature after a stroke as before it.",
 }
 
 
@@ -298,6 +307,7 @@ class CascadeGeometry:
     jaw_twist_reach_mm: float = 1.0
     air_tank_ml: float = 200.0
     start_psi: float = 100.0
+    leak_psi_first_hour: float = 10.0
     piston_bore_mm: float = 12.0
     piston_rod_mm: float = 4.0
     piston_travel_mm: float = 25.0
@@ -607,6 +617,9 @@ ROOM_K = 293.15
 AIR_HEAT_RATIO = 1.4
 #: Below this ratio of downstream to upstream pressure the flow through a port is choked
 CHOKED_RATIO = (2.0 / (AIR_HEAT_RATIO + 1.0)) ** (AIR_HEAT_RATIO / (AIR_HEAT_RATIO - 1.0))
+#: kg/s through a choked port, per m^2 of port and per pascal upstream
+CHOKED_FLOW = math.sqrt(AIR_HEAT_RATIO / (AIR_J_PER_KG_K * ROOM_K)
+                        * (2.0 / (AIR_HEAT_RATIO + 1.0)) ** ((AIR_HEAT_RATIO + 1.0) / (AIR_HEAT_RATIO - 1.0)))
 FLOW_STEPS_PER_STEP = 10
 
 
@@ -616,8 +629,7 @@ def port_flow(upstream_pa: float, downstream_pa: float, port_m2: float) -> float
         return -port_flow(downstream_pa, upstream_pa, port_m2)
     k, r = AIR_HEAT_RATIO, downstream_pa / upstream_pa
     if r <= CHOKED_RATIO:
-        return port_m2 * upstream_pa * math.sqrt(k / (AIR_J_PER_KG_K * ROOM_K)
-                                                 * (2.0 / (k + 1.0)) ** ((k + 1.0) / (k - 1.0)))
+        return port_m2 * upstream_pa * CHOKED_FLOW
     return port_m2 * upstream_pa * math.sqrt(2.0 * k / ((k - 1.0) * AIR_J_PER_KG_K * ROOM_K)
                                              * (r ** (2.0 / k) - r ** ((k + 1.0) / k)))
 
@@ -632,14 +644,29 @@ def chamber_after(pa: float, volume: float, growth: float, source_pa: float, por
     return after - pa * growth / volume * seconds
 
 
+def leak_hole_m2(g: CascadeGeometry) -> float:
+    """The hole that takes a sealed tank from `g.start_psi` down by
+    `g.leak_psi_first_hour` in an hour.  The flow through it stays choked
+    that whole hour, so the tank's absolute pressure falls exponentially."""
+    start_pa = ROOM_PA + g.start_psi * PASCALS_PER_PSI
+    after_pa = ROOM_PA + (g.start_psi - g.leak_psi_first_hour) * PASCALS_PER_PSI
+    if not 0.0 < g.leak_psi_first_hour < g.start_psi or ROOM_PA / after_pa > CHOKED_RATIO:
+        raise ValueError(f"a leak of {g.leak_psi_first_hour} psi in the first hour from {g.start_psi} psi does not "
+                         "keep the leak choked for that hour")
+    falls_per_second = math.log(start_pa / after_pa) / 3600.0
+    return falls_per_second * g.air_tank_ml * 1e-6 / (AIR_J_PER_KG_K * ROOM_K * CHOKED_FLOW)
+
+
 class PneumaticClaw:
     """The valve and the air: which side of the piston the tank feeds, the
-    tank's pressure, which drops each time the valve switches, and the
-    pressure on each side of the piston as air flows through the valve's port."""
+    tank's pressure, which drops each time the valve switches and as air
+    leaks out, and the pressure on each side of the piston as air flows
+    through the valve's port."""
 
     def __init__(self, g: CascadeGeometry):
         self.g = g
         self.air_psi = g.start_psi
+        self.leak_m2 = leak_hole_m2(g)
         self.hold(False)
 
     def hold(self, closed: bool) -> None:
@@ -691,6 +718,13 @@ class PneumaticClaw:
         for _ in range(FLOW_STEPS_PER_STEP):
             self.closing_pa = chamber_after(self.closing_pa, closing_volume, bore * speed, closing_source, port, step)
             self.opening_pa = chamber_after(self.opening_pa, opening_volume, -ring * speed, opening_source, port, step)
+        self.leak(seconds)
+
+    def leak(self, seconds: float) -> None:
+        """Let the tank's air out through the leak for `seconds`."""
+        lost_pa = (AIR_J_PER_KG_K * ROOM_K * port_flow(self.tank_pa, ROOM_PA, self.leak_m2) * seconds
+                   / (self.g.air_tank_ml * 1e-6))
+        self.air_psi -= lost_pa / PASCALS_PER_PSI
 
     def piston_force(self) -> float:
         """Newtons on the piston toward closing the jaws (negative: opening them)."""
@@ -864,6 +898,20 @@ class CascadeRobot:
         self._add_hinges(bodies, self.components(chassis))
         for component in self.components(chassis):
             self._add_shape(spec, bodies[body_name(component, g)], component, masses.get(component.key, 0.0))
+        self._jaws_slip_on_flanges(spec)
+
+    @staticmethod
+    def _jaws_slip_on_flanges(spec: mujoco.MjSpec) -> None:
+        """Each jaw meets each Pin's flange without friction, so the claw
+        cannot lift a Pin by its flange (`CHOSEN["What the claw holds"]`)."""
+        flanges = [geom.name for geom in spec.geoms if geom.name.endswith(pieces.FLANGE_SUFFIX)]
+        jaws = [geom for geom in spec.geoms if geom.contype == pieces.JAW_BIT]
+        for jaw in jaws:
+            for flange in flanges:
+                pair = spec.add_pair(geomname1=jaw.name, geomname2=flange)
+                pair.condim = 1
+                pair.solref = list(jaw.solref)
+                pair.solimp = list(jaw.solimp)
 
     def _add_hinges(self, bodies: dict, components: List[Component]) -> None:
         """A body for each hinge the roller's pieces turn on: the axle, on
@@ -938,8 +986,12 @@ class CascadeRobot:
             geom.mass = kg
         else:
             geom.density = 0.0
-        geom.contype = pieces.ROBOT_BIT
-        geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.PIECE_BIT
+        if component.jaw_side:
+            geom.contype = pieces.JAW_BIT
+            geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.HELD_BY_JAWS_BIT
+        else:
+            geom.contype = pieces.ROBOT_BIT
+            geom.conaffinity = pieces.STATIC_BIT | pieces.FLAT_BIT | pieces.PIECE_BIT
         g = self.geometry
         if component.padded:
             pieces.contact_settings(geom, g.jaw_mu, condim=4, priority=2, spin=g.jaw_mu * g.jaw_twist_reach_mm / 1000.0,

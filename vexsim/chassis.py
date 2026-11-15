@@ -369,3 +369,28 @@ def add_sideways_tracking_wheel(chassis: Chassis, forward_in: float = 0.0, left_
     wheel.preload = load_n
     chassis.wheel_units.append(wheel)
     return chassis
+
+
+TRACTION_PLACES = ("middle", "all")
+
+
+def with_traction_wheels(chassis: Chassis, where: str) -> Chassis:
+    """Swap driven wheels for traction wheels the same size: the middle wheel
+    on each side of a 6-wheel drive (`where="middle"`), the usual way to stop
+    a robot being pushed sideways while it still turns, or every driven wheel
+    (`where="all"`)."""
+    if where not in TRACTION_PLACES:
+        raise ValueError(f"traction wheels go in one of {TRACTION_PLACES}, not {where!r}")
+    swapped: List[WheelUnit] = []
+    for side in (chassis.left_units(), chassis.right_units()):
+        driven = sorted((u for u in side if u.driven), key=lambda u: u.x)
+        if where == "middle":
+            if len(driven) != 3:
+                raise ValueError(f"{chassis.name} has {len(driven)} driven wheels a side; middle traction wheels "
+                                 "need a 6-wheel drive")
+            driven = [driven[1]]
+        swapped.extend(driven)
+    for unit in swapped:
+        unit.wheel = wheel_presets.traction(round(unit.wheel.diameter / INCH, 2))
+    chassis.name = f"{chassis.name}, {where} traction"
+    return chassis

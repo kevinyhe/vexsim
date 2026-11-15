@@ -343,15 +343,28 @@ class MujocoDrive:
         try:
             mujoco.mj_step1(m, d)
             d.qfrc_applied[:] = 0.0
-            d.xfrc_applied[self.tree_bodies] = 0.0
-            self._wheel_forces(dt)
-            self._drag()
-            for add in self.forces:
-                add(dt)
+            self.push(dt)
             mujoco.mj_step2(m, d)
         finally:
             d.threadpool = 0
         raise_on_warnings(m, d)
+        self.moved(dt)
+
+    def push(self, dt: float) -> None:
+        """Set this robot's forces for the step MuJoCo is about to take: the
+        wheels', the drag, and those `forces` add.  `step` calls it; a
+        robot in a world another drive steps calls it from that drive's
+        `forces`."""
+        self.data.xfrc_applied[self.tree_bodies] = 0.0
+        self._wheel_forces(dt)
+        self._drag()
+        for add in self.forces:
+            add(dt)
+
+    def moved(self, dt: float) -> None:
+        """Read back what MuJoCo's step did to the robot: the wheels' spin, its
+        state and how far it leans, then run `after`."""
+        d = self.data
         for wheel in self.wheels:
             wheel.unit.omega = float(d.qvel[wheel.speed_at])
             wheel.unit.angle = float(d.qpos[wheel.angle_at])
