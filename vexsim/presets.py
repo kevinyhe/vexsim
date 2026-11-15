@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .chassis import Chassis, add_sideways_tracking_wheel, add_tracking_wheels, differential_drive
-from .motor import v5_5_5w, cortex_393
+from .motor import Motor, v5_5_5w, cortex_393
 
 
 def four_motor_200(mass_lb: float = 14.0) -> Chassis:
@@ -68,6 +68,32 @@ def four_motor_450(mass_lb: float = 16.5) -> Chassis:
         cg_height_in=5.0,
         name="4m 450rpm 36:48 3.25 omni",
     )
+
+
+def six_motor_55w(mass_lb: float = 16.3) -> Chassis:
+    """Override's whole 55 W drive allowance (R11): on each side, two blue
+    11 W motors geared 36:48 on the front and back wheels and one 5.5 W motor
+    on the middle wheel, all 450 rpm at a 3.25 in omni.
+
+    A 5.5 W motor tops out at 200 rpm, so it turns a 36-tooth driving a
+    12-tooth on a shaft whose 36-tooth drives the wheel's 48-tooth: two
+    stages, each losing 5%.  16.3 lb is `six_motor_450` less the 0.2 lb two
+    5.5 W motors save over 11 W ones.
+    """
+    chassis = differential_drive(
+        mass_lb=mass_lb, wheel="omni_3.25", cartridge="blue",
+        motors_per_side=3, wheels_per_side=3,
+        external_ratio=48.0 / 36.0,
+        track_width_in=11.5, wheel_base_in=11.0,
+        name="6m 55 W: 4 blue 36:48 + 2 x 5.5 W, 450 rpm 3.25 omni",
+    )
+    for side in (chassis.left_units(), chassis.right_units()):
+        middle = sorted(side, key=lambda unit: unit.x)[1]
+        middle.motors = [Motor(spec=v5_5_5w(), cartridge="green", name=middle.motors[0].name)]
+        middle.gear_ratio = (12.0 / 36.0) * (48.0 / 36.0)
+        middle.efficiency = 0.95 ** 2
+    chassis.invalidate_motor_cache()
+    return chassis
 
 
 def override_cascade() -> Chassis:
@@ -154,6 +180,7 @@ ALL = {
     "six_motor_450": six_motor_450,
     "six_motor_600": six_motor_600,
     "four_motor_450": four_motor_450,
+    "six_motor_55w": six_motor_55w,
     "override_cascade": override_cascade,
     "speed_base": speed_base,
     "push_bot": push_bot,

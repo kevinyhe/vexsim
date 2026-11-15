@@ -104,6 +104,7 @@ numbers.
 | `six_motor_450` | 6 blue, 36:48, 450 rpm | 3.25 in omni | 16.5 lb |
 | `six_motor_600` | 6 blue, 36:60, 360 rpm | 3.25 in omni | 15 lb |
 | `four_motor_450` | 4 blue, 36:48, 450 rpm | 3.25 in omni | 16.5 lb |
+| `six_motor_55w` | 4 blue, 36:48, and 2 x 5.5 W on the middle wheels, 450 rpm: Override's 55 W | 3.25 in omni | 16.3 lb |
 | `override_cascade` | 4 blue, 36:48, 450 rpm | 2.75 in omni, sprung 2 in sideways tracking wheel | 14 lb, CG 3.5 in up |
 | `speed_base` | 4 blue, 36:48, 450 rpm | 4 in omni | 13 lb |
 | `push_bot` | 6 red, 100 rpm | 4 in traction | 22 lb |
