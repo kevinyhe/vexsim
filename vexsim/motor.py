@@ -113,25 +113,34 @@ def v5_11w() -> MotorSpec:
 
 
 def v5_5_5w() -> MotorSpec:
-    """The 5.5 W motor's fixed 200 rpm equivalent.
+    """The 5.5 W V5 Smart Motor (276-4842): 200 rpm, 0.5 Nm, 5.5 W.
+
+    Voltage commands top out at 8 V (vexide's limit for this motor; LemLib
+    uses 7.2 V), and with no load the motor reaches 200 rpm at 8 V. Kt = Ke
+    is fitted to that, and the current limit keeps the 0.5 Nm stall torque.
+    Neither the 8 V nor the current limit has been measured.
 
     Its exact temperature-current table is not established by the referenced
     5.5 W datasheet; reusing the 11 W policy is an explicit model assumption.
     """
+    full_volts, resistance, no_load_current = 8.0, 1.5, 0.12
+    ratio, efficiency, stall_torque_nm = 18.0, 0.83, 0.5
+    rotor_rad_s_at_200_rpm = 200.0 * ratio * 2.0 * math.pi / 60.0
+    k = (full_volts - no_load_current * resistance) / rotor_rad_s_at_200_rpm
     return MotorSpec(
         name="V5 5.5W",
-        kt=0.014061849639454177,  # 0.5 Nm with the equivalent fixed 18:1 gearing
-        ke=0.014061849639454177,
-        resistance=1.5,
-        nominal_voltage=7.2,     # approximate internal PWM voltage, not V5 bus
-        no_load_current=0.12,
+        kt=k,
+        ke=k,
+        resistance=resistance,
+        nominal_voltage=full_volts,
+        no_load_current=no_load_current,
         rotor_inertia=1.1e-6,
-        current_limit=2.5,
-        gearbox_efficiency=0.83,
+        current_limit=no_load_current + stall_torque_nm / (k * ratio * efficiency),
+        gearbox_efficiency=efficiency,
         thermal_resistance=4.2,
         thermal_capacitance=14.0,
         peak_power_rating=5.5,
-        fixed_ratio=18.0,
+        fixed_ratio=ratio,
         thermal_policy="assumed V5 11W-style steps; 5.5 W thresholds uncalibrated",
     )
 

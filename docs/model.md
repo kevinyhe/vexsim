@@ -29,7 +29,7 @@ lumped thermal RC. V5 motors add a speed, current and power governor.
 | Model | Fitted to |
 | --- | --- |
 | 11 W | 100 / 200 / 600 rpm and 2.1 / 1.05 / 0.35 N·m for red / green / blue, with the near-nominal-speed plateau under moderate load |
-| 5.5 W | 200 rpm, 0.5 N·m, 5.5 W |
+| 5.5 W | 200 rpm at 8 V, 0.5 N·m, 5.5 W. Commands above 8 V do nothing more |
 | 393 | 100 rpm, 1.67 N·m, 4.8 A stall, 0.37 A free, at 7.2 V |
 
 These are fitted equivalents, not measured internals. Resistance, gearbox
